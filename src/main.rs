@@ -1,5 +1,4 @@
-#![allow(unused)]
-#![allow(dead_code)]
+mod nus;
 
 fn main() {
     println!("こんにちは世界！");
