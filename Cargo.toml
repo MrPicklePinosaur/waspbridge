@@ -10,3 +10,5 @@ repository = "https://github.com/MrPicklePinosaur/waspbridge"
 [features]
 
 [dependencies]
+rexpect = "0.4"
+anyhow = "1"

@@ -5,27 +5,43 @@
 
 use std::process::Command;
 
-// NOTE: Careful with this, it executes an arbritrary user command in python
-pub(crate) fn eval(command: &str) {
+use rexpect::session::PtySession;
 
-    let output = Command::new("bin/wasptool")
-        .arg("--eval")
-        .arg(format!("from gadgetbridge import GB; GB({})", command))
-        .output()
-        .unwrap();
+struct Client {
+    session: PtySession
+}
 
-    println!("{:?}", output);
+impl Client {
+    
+    pub fn new() -> rexpect::errors::Result<Self> {
+        let mut session = rexpect::spawn("bin/pynus/pynus.py", Some(5_000))?;
+        session.exp_regex(r#"Connected to [a-zA-Z0-9]* \([0-9A-F:]*\)\."#)?;
+        session.exp_regex(r#"(Resolving services...)?"#)?;
+        session.exp_regex(r#"Exit console using Ctrl-X\."#)?;
+        Ok(Client { session })
+    }
 
-    println!("{}", output.status);
-
+    pub fn cmd(&mut self, command: &str) -> rexpect::errors::Result<()> {
+        let command_str = format!("from gadgetbridge import GB; GB({})", command);
+        self.session.send_line(&command_str)?;
+        self.session.exp_string(&command_str)?;
+        self.session.exp_string(">>> ")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::eval;
+    use super::Client;
+
+    // #[test]
+    // fn create_client() {
+    //     Client::new().unwrap();
+    // }
 
     #[test]
-    fn test_eval() {
-        eval("{'t': 'vibrate', 'n': true}");
+    fn client_cmd() {
+        let mut client = Client::new().unwrap();
+        client.cmd(r#"{"t": "find", "n": false}"#).unwrap();
     }
 }
