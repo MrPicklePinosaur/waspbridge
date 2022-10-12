@@ -1,0 +1,12 @@
+[package]
+name = "waspbridge"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["MrPicklePinosaur"]
+description = "companion application for wasp-os"
+repository = "https://github.com/MrPicklePinosaur/waspbridge"
+
+[features]
+
+[dependencies]
