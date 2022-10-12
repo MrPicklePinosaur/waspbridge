@@ -3,7 +3,8 @@
 //!
 //! It would be great to reimplement both pynus and wasptool in rust in the future.
 
-use std::process::Command;
+use std::str;
+use std::{process::Command, time::Duration};
 
 use rexpect::session::PtySession;
 
@@ -14,10 +15,18 @@ struct Client {
 impl Client {
     
     pub fn new() -> rexpect::errors::Result<Self> {
+
+        // establish connection
         let mut session = rexpect::spawn("bin/pynus/pynus.py", Some(5_000))?;
         session.exp_regex(r#"Connected to [a-zA-Z0-9]* \([0-9A-F:]*\)\."#)?;
         session.exp_regex(r#"(Resolving services...)?"#)?;
         session.exp_regex(r#"Exit console using Ctrl-X\."#)?;
+        std::thread::sleep(Duration::from_millis(500));
+
+        // attempt to sync the tty
+        session.send_line(&format!("{}", str::from_utf8(&[0x03]).unwrap()))?;
+        session.exp_string(">>> ")?;
+
         Ok(Client { session })
     }
 
@@ -44,4 +53,5 @@ mod tests {
         let mut client = Client::new().unwrap();
         client.cmd(r#"{"t": "find", "n": false}"#).unwrap();
     }
+
 }
