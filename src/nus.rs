@@ -15,8 +15,13 @@ use std::{
 
 use rexpect::session::PtySession;
 
+enum Cmd {
+    Msg(String),
+    Quit,
+}
+
 struct Client {
-    msg_queue: LinkedList<String>,
+    msg_queue: LinkedList<Cmd>,
     session: PtySession,
 }
 
@@ -39,7 +44,7 @@ impl Client {
         })
     }
 
-    pub fn send_cmd(&mut self, command: &str) -> rexpect::errors::Result<()> {
+    fn send_cmd(&mut self, command: &str) -> rexpect::errors::Result<()> {
         let command_str = format!("from gadgetbridge import GB; GB({})", command);
         self.session.send_line(&command_str)?;
 
@@ -49,9 +54,9 @@ impl Client {
         Ok(())
     }
 
-    pub fn queue_cmd(this: Arc<Mutex<Self>>, command: &str) {
+    pub fn queue_cmd(this: Arc<Mutex<Self>>, command: Cmd) {
         let mut lock = this.lock().unwrap();
-        lock.msg_queue.push_back(command.to_owned());
+        lock.msg_queue.push_back(command);
     }
 
     fn parse_msg(&mut self) {}
@@ -74,9 +79,19 @@ impl Client {
                 }
 
                 // send any requested messages
-                if lock.msg_queue.len() > 0 {
+                if !lock.msg_queue.is_empty() {
                     let msg = lock.msg_queue.pop_front().unwrap();
-                    lock.send_cmd(&msg).unwrap();
+                    match msg {
+                        Cmd::Msg(msg) => {
+                            lock.send_cmd(&msg).unwrap();
+                        },
+                        Cmd::Quit => {
+                            lock.session
+                                .send_line(str::from_utf8(&[0x18]).unwrap())
+                                .unwrap();
+                            return;
+                        },
+                    }
                 }
             }
         })
@@ -91,7 +106,7 @@ mod tests {
         time::Duration,
     };
 
-    use super::Client;
+    use super::{Client, Cmd};
 
     // #[test]
     // fn create_client() {
@@ -111,10 +126,19 @@ mod tests {
         let handle = Client::run(client_arc.clone());
 
         thread::sleep(Duration::from_secs(2));
-        Client::queue_cmd(client_arc.clone(), r#"{"t": "find", "n": true}"#);
+        Client::queue_cmd(
+            client_arc.clone(),
+            Cmd::Msg(r#"{"t": "find", "n": true}"#.into()),
+        );
 
         thread::sleep(Duration::from_secs(2));
-        Client::queue_cmd(client_arc.clone(), r#"{"t": "find", "n": false}"#);
+        Client::queue_cmd(
+            client_arc.clone(),
+            Cmd::Msg(r#"{"t": "find", "n": false}"#.into()),
+        );
+
+        thread::sleep(Duration::from_secs(2));
+        Client::queue_cmd(client_arc.clone(), Cmd::Quit);
 
         handle.join().unwrap();
     }
