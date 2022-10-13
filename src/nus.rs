@@ -5,6 +5,7 @@
 
 use std::{
     collections::LinkedList,
+    marker::{PhantomData, Send},
     process::Command,
     str,
     sync::{Arc, Mutex},
@@ -14,18 +15,25 @@ use std::{
 };
 
 use rexpect::session::PtySession;
+use serde::{de::DeserializeOwned, Serialize};
 
-enum Cmd {
-    Msg(String),
+enum Cmd<Out: Serialize> {
+    Msg(Out),
     Quit,
 }
 
-struct Client {
-    msg_queue: LinkedList<Cmd>,
+struct Client<In, Out: Serialize> {
+    in_phantom: PhantomData<In>,
+    cmd_queue: LinkedList<Cmd<Out>>,
     session: PtySession,
 }
 
-impl Client {
+// forcing `Out` to be 'static is not the best fix rn
+impl<In, Out> Client<In, Out>
+where
+    In: DeserializeOwned + Send + 'static + std::fmt::Debug,
+    Out: Serialize + Send + 'static,
+{
     /// Attempt to connect to a pinetime
     ///
     /// Currently there is no way to specify which pinetime to connect to
@@ -42,15 +50,16 @@ impl Client {
         session.exp_string(">>> ")?;
 
         Ok(Client {
-            msg_queue: LinkedList::new(),
+            in_phantom: PhantomData,
+            cmd_queue: LinkedList::new(),
             session,
         })
     }
 
     /// Send a message to wasp-os, calling it's handler function
-    pub fn send_msg(this: Arc<Mutex<Self>>, msg: &str) {
+    pub fn send_msg(this: Arc<Mutex<Self>>, msg: Out) {
         let mut lock = this.lock().unwrap();
-        lock.msg_queue.push_back(Cmd::Msg(msg.into()));
+        lock.cmd_queue.push_back(Cmd::Msg(msg));
     }
 
     /// Terminate the REPL connection
@@ -58,7 +67,7 @@ impl Client {
     /// This could be also done by implementing the `Drop` trait in the future
     pub fn send_quit(this: Arc<Mutex<Self>>) {
         let mut lock = this.lock().unwrap();
-        lock.msg_queue.push_back(Cmd::Quit);
+        lock.cmd_queue.push_back(Cmd::Quit);
     }
 
     /// Write a message to the wasp-os repl
@@ -72,7 +81,16 @@ impl Client {
         Ok(())
     }
 
-    fn parse_msg(&mut self) {}
+    // TODO this should be moved somewhere else
+    // possibly even have another thread handle the parsing and execution of messages
+    fn parse_msg(&mut self, msg: String) -> anyhow::Result<()> {
+        println!("got message {}", msg);
+
+        let client_msg: In = serde_json::from_str(&msg)?;
+        println!("{:?}", client_msg);
+
+        Ok(())
+    }
 
     /// Start command reader + listener
     pub fn run(this: Arc<Mutex<Self>>) -> JoinHandle<()> {
@@ -84,6 +102,7 @@ impl Client {
                 let mut lock = this.lock().unwrap();
                 if let Some(c) = lock.session.try_read() {
                     if c == '\r' || c == '\n' {
+                        lock.parse_msg(cur_line.iter().collect());
                         println!("emptying... {:?}", cur_line);
                         cur_line.clear();
                     } else {
@@ -93,11 +112,12 @@ impl Client {
                 }
 
                 // send any requested messages
-                if !lock.msg_queue.is_empty() {
-                    let msg = lock.msg_queue.pop_front().unwrap();
+                if !lock.cmd_queue.is_empty() {
+                    let msg = lock.cmd_queue.pop_front().unwrap();
                     match msg {
                         Cmd::Msg(msg) => {
-                            lock.write_msg(&msg).unwrap();
+                            let str_msg = serde_json::to_string(&msg).unwrap();
+                            lock.write_msg(&str_msg).unwrap();
                         },
                         Cmd::Quit => {
                             lock.session
@@ -121,20 +141,39 @@ mod tests {
     };
 
     use super::{Client, Cmd};
+    use crate::models::{ClientMessage, WatchMessage};
 
     #[test]
     fn find_test() {
-        let client = Client::new().unwrap();
+        let client: Client<ClientMessage, WatchMessage> = Client::new().unwrap();
         let client_arc = Arc::new(Mutex::new(client));
         let handle = Client::run(client_arc.clone());
 
         thread::sleep(Duration::from_secs(2));
-        Client::send_msg(client_arc.clone(), r#"{"t": "find", "n": true}"#);
+        Client::send_msg(client_arc.clone(), WatchMessage::find { n: true });
 
         thread::sleep(Duration::from_secs(2));
-        Client::send_msg(client_arc.clone(), r#"{"t": "find", "n": false}"#);
+        Client::send_msg(client_arc.clone(), WatchMessage::find { n: false });
 
         thread::sleep(Duration::from_secs(2));
+        Client::send_quit(client_arc.clone());
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn recieve_test() {
+        let client: Client<ClientMessage, WatchMessage> = Client::new().unwrap();
+        let client_arc = Arc::new(Mutex::new(client));
+        let handle = Client::run(client_arc.clone());
+
+        thread::sleep(Duration::from_secs(1));
+        Client::send_msg(client_arc.clone(), WatchMessage::find { n: true });
+
+        thread::sleep(Duration::from_secs(1));
+        Client::send_msg(client_arc.clone(), WatchMessage::find { n: false });
+
+        thread::sleep(Duration::from_secs(15));
         Client::send_quit(client_arc.clone());
 
         handle.join().unwrap();

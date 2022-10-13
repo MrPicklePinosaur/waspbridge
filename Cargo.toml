@@ -12,3 +12,5 @@ repository = "https://github.com/MrPicklePinosaur/waspbridge"
 [dependencies]
 rexpect = "0.4"
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }

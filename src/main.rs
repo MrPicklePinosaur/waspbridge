@@ -1,3 +1,4 @@
+mod models;
 mod nus;
 
 fn main() {
