@@ -26,6 +26,9 @@ struct Client {
 }
 
 impl Client {
+    /// Attempt to connect to a pinetime
+    ///
+    /// Currently there is no way to specify which pinetime to connect to
     pub fn new() -> rexpect::errors::Result<Self> {
         // establish connection
         let mut session = rexpect::spawn("bin/pynus/pynus.py", Some(5_000))?;
@@ -44,7 +47,22 @@ impl Client {
         })
     }
 
-    fn send_cmd(&mut self, command: &str) -> rexpect::errors::Result<()> {
+    /// Send a message to wasp-os, calling it's handler function
+    pub fn send_msg(this: Arc<Mutex<Self>>, msg: &str) {
+        let mut lock = this.lock().unwrap();
+        lock.msg_queue.push_back(Cmd::Msg(msg.into()));
+    }
+
+    /// Terminate the REPL connection
+    ///
+    /// This could be also done by implementing the `Drop` trait in the future
+    pub fn send_quit(this: Arc<Mutex<Self>>) {
+        let mut lock = this.lock().unwrap();
+        lock.msg_queue.push_back(Cmd::Quit);
+    }
+
+    /// Write a message to the wasp-os repl
+    fn write_msg(&mut self, command: &str) -> rexpect::errors::Result<()> {
         let command_str = format!("from gadgetbridge import GB; GB({})", command);
         self.session.send_line(&command_str)?;
 
@@ -54,13 +72,9 @@ impl Client {
         Ok(())
     }
 
-    pub fn queue_cmd(this: Arc<Mutex<Self>>, command: Cmd) {
-        let mut lock = this.lock().unwrap();
-        lock.msg_queue.push_back(command);
-    }
-
     fn parse_msg(&mut self) {}
 
+    /// Start command reader + listener
     pub fn run(this: Arc<Mutex<Self>>) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut cur_line: Vec<char> = vec![];
@@ -70,7 +84,7 @@ impl Client {
                 let mut lock = this.lock().unwrap();
                 if let Some(c) = lock.session.try_read() {
                     if c == '\r' || c == '\n' {
-                        println!("empyting... {:?}", cur_line);
+                        println!("emptying... {:?}", cur_line);
                         cur_line.clear();
                     } else {
                         cur_line.push(c);
@@ -83,7 +97,7 @@ impl Client {
                     let msg = lock.msg_queue.pop_front().unwrap();
                     match msg {
                         Cmd::Msg(msg) => {
-                            lock.send_cmd(&msg).unwrap();
+                            lock.write_msg(&msg).unwrap();
                         },
                         Cmd::Quit => {
                             lock.session
@@ -108,37 +122,20 @@ mod tests {
 
     use super::{Client, Cmd};
 
-    // #[test]
-    // fn create_client() {
-    //     Client::new().unwrap();
-    // }
-
-    // #[test]
-    // fn client_cmd() {
-    //     let mut client = Client::new().unwrap();
-    //     client.cmd(r#"{"t": "find", "n": false}"#).unwrap();
-    // }
-
     #[test]
-    fn listen() {
+    fn find_test() {
         let client = Client::new().unwrap();
         let client_arc = Arc::new(Mutex::new(client));
         let handle = Client::run(client_arc.clone());
 
         thread::sleep(Duration::from_secs(2));
-        Client::queue_cmd(
-            client_arc.clone(),
-            Cmd::Msg(r#"{"t": "find", "n": true}"#.into()),
-        );
+        Client::send_msg(client_arc.clone(), r#"{"t": "find", "n": true}"#);
 
         thread::sleep(Duration::from_secs(2));
-        Client::queue_cmd(
-            client_arc.clone(),
-            Cmd::Msg(r#"{"t": "find", "n": false}"#.into()),
-        );
+        Client::send_msg(client_arc.clone(), r#"{"t": "find", "n": false}"#);
 
         thread::sleep(Duration::from_secs(2));
-        Client::queue_cmd(client_arc.clone(), Cmd::Quit);
+        Client::send_quit(client_arc.clone());
 
         handle.join().unwrap();
     }
