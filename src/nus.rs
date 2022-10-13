@@ -22,8 +22,10 @@ enum Cmd<Out: Serialize> {
     Quit,
 }
 
+type InHandler = fn(String) -> anyhow::Result<()>;
 struct Client<In, Out: Serialize> {
     in_phantom: PhantomData<In>,
+    in_handler: InHandler,
     cmd_queue: LinkedList<Cmd<Out>>,
     session: PtySession,
 }
@@ -37,7 +39,7 @@ where
     /// Attempt to connect to a pinetime
     ///
     /// Currently there is no way to specify which pinetime to connect to
-    pub fn new() -> rexpect::errors::Result<Self> {
+    pub fn new(in_handler: InHandler) -> rexpect::errors::Result<Self> {
         // establish connection
         let mut session = rexpect::spawn("bin/pynus/pynus.py", Some(5_000))?;
         session.exp_regex(r#"Connected to [a-zA-Z0-9]* \([0-9A-F:]*\)\."#)?;
@@ -51,6 +53,7 @@ where
 
         Ok(Client {
             in_phantom: PhantomData,
+            in_handler,
             cmd_queue: LinkedList::new(),
             session,
         })
@@ -83,6 +86,7 @@ where
 
     // TODO this should be moved somewhere else
     // possibly even have another thread handle the parsing and execution of messages
+    /*
     fn parse_msg(&mut self, msg: String) -> anyhow::Result<()> {
         println!("got message {}", msg);
 
@@ -91,6 +95,7 @@ where
 
         Ok(())
     }
+    */
 
     /// Start command reader + listener
     pub fn run(this: Arc<Mutex<Self>>) -> JoinHandle<()> {
@@ -102,7 +107,7 @@ where
                 let mut lock = this.lock().unwrap();
                 if let Some(c) = lock.session.try_read() {
                     if c == '\r' || c == '\n' {
-                        lock.parse_msg(cur_line.iter().collect());
+                        (lock.in_handler)(cur_line.iter().collect());
                         println!("emptying... {:?}", cur_line);
                         cur_line.clear();
                     } else {
@@ -141,11 +146,15 @@ mod tests {
     };
 
     use super::{Client, Cmd};
-    use crate::models::{ClientMessage, WatchMessage};
+    use crate::{
+        handler::handler,
+        models::{ClientMessage, WatchMessage},
+    };
 
     #[test]
     fn find_test() {
-        let client: Client<ClientMessage, WatchMessage> = Client::new().unwrap();
+        let client: Client<ClientMessage, WatchMessage> =
+            Client::new(|s: String| -> anyhow::Result<()> { Ok(()) }).unwrap();
         let client_arc = Arc::new(Mutex::new(client));
         let handle = Client::run(client_arc.clone());
 
@@ -163,7 +172,7 @@ mod tests {
 
     #[test]
     fn recieve_test() {
-        let client: Client<ClientMessage, WatchMessage> = Client::new().unwrap();
+        let client: Client<ClientMessage, WatchMessage> = Client::new(handler).unwrap();
         let client_arc = Arc::new(Mutex::new(client));
         let handle = Client::run(client_arc.clone());
 

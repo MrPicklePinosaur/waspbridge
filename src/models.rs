@@ -16,6 +16,7 @@ pub enum WatchMessage {
 #[allow(non_camel_case_types)]
 pub enum ClientMessage {
     music { n: MusicAction },
+    lock_screen,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

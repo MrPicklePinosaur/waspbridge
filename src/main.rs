@@ -1,3 +1,4 @@
+mod handler;
 mod models;
 mod nus;
 
