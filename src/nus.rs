@@ -182,7 +182,7 @@ mod tests {
         thread::sleep(Duration::from_secs(1));
         Client::send_msg(client_arc.clone(), WatchMessage::find { n: false });
 
-        thread::sleep(Duration::from_secs(15));
+        thread::sleep(Duration::from_secs(60));
         Client::send_quit(client_arc.clone());
 
         handle.join().unwrap();
