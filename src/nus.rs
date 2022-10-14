@@ -23,7 +23,7 @@ enum Cmd<Out: Serialize> {
 }
 
 type InHandler = fn(String) -> anyhow::Result<()>;
-struct Client<In, Out: Serialize> {
+pub struct Client<In, Out: Serialize> {
     in_phantom: PhantomData<In>,
     in_handler: InHandler,
     cmd_queue: LinkedList<Cmd<Out>>,

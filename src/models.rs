@@ -26,4 +26,6 @@ pub enum MusicAction {
     pause,
     next,
     previous,
+    volumeup,
+    volumedown,
 }

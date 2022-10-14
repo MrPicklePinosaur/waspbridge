@@ -26,6 +26,8 @@ fn handle_music(action: MusicAction) -> anyhow::Result<()> {
         MusicAction::pause => cmd.arg("pause"),
         MusicAction::next => cmd.arg("next"),
         MusicAction::previous => cmd.arg("prev"),
+        MusicAction::volumeup => return Ok(()),
+        MusicAction::volumedown => return Ok(()),
     };
     cmd.output()?;
 
