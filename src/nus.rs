@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 
+use log::debug;
 use rexpect::session::PtySession;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -84,19 +85,6 @@ where
         Ok(())
     }
 
-    // TODO this should be moved somewhere else
-    // possibly even have another thread handle the parsing and execution of messages
-    /*
-    fn parse_msg(&mut self, msg: String) -> anyhow::Result<()> {
-        println!("got message {}", msg);
-
-        let client_msg: In = serde_json::from_str(&msg)?;
-        println!("{:?}", client_msg);
-
-        Ok(())
-    }
-    */
-
     /// Start command reader + listener
     pub fn run(this: Arc<Mutex<Self>>) -> JoinHandle<()> {
         thread::spawn(move || {
@@ -108,11 +96,11 @@ where
                 if let Some(c) = lock.session.try_read() {
                     if c == '\r' || c == '\n' {
                         (lock.in_handler)(cur_line.iter().collect());
-                        println!("emptying... {:?}", cur_line);
+                        debug!("emptying... {:?}", cur_line);
                         cur_line.clear();
                     } else {
                         cur_line.push(c);
-                        println!("line {:?}", cur_line);
+                        debug!("line {:?}", cur_line);
                     }
                 }
 

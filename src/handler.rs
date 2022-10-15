@@ -2,13 +2,15 @@
 
 use std::process::Command;
 
+use log::debug;
+
 use crate::models::{ClientMessage, MusicAction};
 
 pub fn handler(msg: String) -> anyhow::Result<()> {
-    println!("got message {}", msg);
+    debug!("got message {}", msg);
 
     let client_msg: ClientMessage = serde_json::from_str(&msg)?;
-    println!("{:?}", client_msg);
+    debug!("{:?}", client_msg);
 
     match client_msg {
         ClientMessage::music { n } => handle_music(n)?,
