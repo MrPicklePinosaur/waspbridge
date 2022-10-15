@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use log::debug;
+use log::{debug, error};
 use rexpect::session::PtySession;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -95,7 +95,10 @@ where
                 let mut lock = this.lock().unwrap();
                 if let Some(c) = lock.session.try_read() {
                     if c == '\r' || c == '\n' {
-                        (lock.in_handler)(cur_line.iter().collect());
+                        let res = (lock.in_handler)(cur_line.iter().collect());
+                        if let Err(e) = res {
+                            error!("[handler error] {:?}", e);
+                        }
                         debug!("emptying... {:?}", cur_line);
                         cur_line.clear();
                     } else {

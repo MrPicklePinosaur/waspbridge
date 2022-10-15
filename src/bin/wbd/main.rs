@@ -1,17 +1,15 @@
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
-use handler::handler;
 use log::info;
-use models::{ClientMessage, WatchMessage};
-use nus::Client;
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
     iterator::Signals,
 };
-
-mod handler;
-mod models;
-mod nus;
+use waspbridge::{
+    handler::handler,
+    models::{ClientMessage, WatchMessage},
+    nus::Client,
+};
 
 fn main() {
     env_logger::builder().init();
@@ -34,8 +32,6 @@ fn main() {
             },
         }
     }
-
-    // cli parser
 
     handle.join().unwrap();
 }

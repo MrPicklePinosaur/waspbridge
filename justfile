@@ -1,8 +1,11 @@
 
-default: debug
+default: wbd
 
-debug:
-    cargo run
+wbd:
+    cargo run --bin wbd
+
+wbcli:
+    cargo run --bin wbcli
 
 devsetup:
     cp dev/hooks/* .git/hooks

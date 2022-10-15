@@ -7,7 +7,13 @@ authors = ["MrPicklePinosaur"]
 description = "companion application for wasp-os"
 repository = "https://github.com/MrPicklePinosaur/waspbridge"
 
-[features]
+[[bin]]
+name = "wbd"
+path = "src/bin/wbd/main.rs"
+
+[[bin]]
+name = "wbcli"
+path = "src/bin/wbcli/main.rs"
 
 [dependencies]
 rexpect = "0.4"
