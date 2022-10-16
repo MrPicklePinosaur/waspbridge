@@ -1,6 +1,11 @@
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::{
+    io::Read,
+    os::unix::net::{UnixListener, UnixStream},
+    sync::{atomic::AtomicBool, Arc, Mutex},
+    thread,
+};
 
-use log::info;
+use log::{error, info};
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
     iterator::Signals,
@@ -33,5 +38,38 @@ fn main() {
         }
     }
 
+    thread::spawn(|| {
+        listen();
+    });
+
     handle.join().unwrap();
+}
+
+fn listen() -> std::io::Result<()> {
+    const SOCKET_PATH: &'static str = "/tmp/waspbridge";
+
+    // listen on unix socket
+    let listener = UnixListener::bind(SOCKET_PATH)?;
+
+    for stream in listener.incoming() {
+        let mut stream = stream?;
+        thread::spawn(move || {
+            let mut str_buf = String::new();
+
+            loop {
+                stream.read_to_string(&mut str_buf);
+            }
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::listen;
+
+    #[test]
+    fn listen_test() {
+        let res = listen().unwrap();
+    }
 }
